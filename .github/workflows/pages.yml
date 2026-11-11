@@ -1,0 +1,75 @@
+# 毎週土曜に最新の当選番号を取り込み、テストしてから GitHub Pages に公開する。
+# main への push と手動実行（Actions タブの "Run workflow"）でも公開される。
+name: Update data & deploy
+
+on:
+  schedule:
+    - cron: "0 0 * * 6"   # 土曜 9:00 JST（金曜夜の抽せん結果を取り込む）
+    - cron: "0 12 * * 6"  # 土曜 21:00 JST（朝に間に合わなかった場合の再試行）
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 更新したデータを main にコミットするため
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch latest draws
+        if: github.event_name != 'push'
+        # 取得元が落ちていても、手元のデータのまま公開は続ける
+        continue-on-error: true
+        run: bash scripts/update-data.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test
+        run: node tests/engine.test.js
+
+      - name: Commit updated data
+        if: github.event_name != 'push'
+        run: |
+          if git diff --quiet -- data; then
+            echo "No new draws."
+            exit 0
+          fi
+          LAST=$(tail -1 data/loto7.csv | cut -d, -f1)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git commit -m "data: 第${LAST}回までの当選番号を追加"
+          git push
+
+      - name: Build
+        run: |
+          bash scripts/build.sh
+          mkdir -p site
+          cp dist/lucky-seven.html site/index.html
+          cp dist/lucky-seven.html site/lucky-seven.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

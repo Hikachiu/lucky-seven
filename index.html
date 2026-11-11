@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lucky Seven</title>
+  <meta name="claude:viewport-fit-sides" content="cover">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@800&display=swap">
+  <link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <h1>Lucky Seven <span class="sub">ロト7 分析ラボ</span></h1>
+      <p class="meta" id="dataInfo">データ読み込み中…</p>
+      <label class="import">最新CSVを読み込む
+        <input type="file" id="csvFile" accept=".csv,text/csv">
+      </label>
+      <p class="inline-msg" id="importMsg" hidden></p>
+    </div>
+  </header>
+
+  <nav class="tabs wrap" role="tablist">
+    <button role="tab" data-tab="predict" aria-selected="true">予想</button>
+    <button role="tab" data-tab="check">当せん確認</button>
+    <button role="tab" data-tab="stats">分析</button>
+    <button role="tab" data-tab="backtest">検証</button>
+    <button role="tab" data-tab="history">過去の結果</button>
+  </nav>
+
+  <main class="wrap">
+    <section id="tab-predict" class="panel">
+      <div class="card latest">
+        <div class="latest-head">
+          <h2>前回の結果</h2>
+          <span class="desc" id="latestMeta"></span>
+        </div>
+        <div class="balls" id="latestBalls"></div>
+        <p class="inline-msg" id="staleMsg" hidden></p>
+      </div>
+      <div class="card">
+        <h2>次回（第<span id="nextNo"></span>回）の組合せを生成</h2>
+        <div class="controls">
+          <label>戦略
+            <select id="strategy"></select>
+          </label>
+          <label>口数
+            <input type="number" id="count" min="1" max="20" value="5">
+          </label>
+          <button id="genBtn" class="primary">生成する</button>
+        </div>
+        <p class="desc" id="strategyDesc"></p>
+        <div id="tickets" class="tickets"></div>
+        <div class="row-actions">
+          <button id="copyAll" class="copy">全部コピー（LINEに貼れる形式）</button>
+          <button id="saveAll" class="copy">全部保存</button>
+        </div>
+      </div>
+      <div class="card note">
+        <h3>正直なところ</h3>
+        <p>ロト7は37個から7個を選ぶ抽せんで、1等の確率は <b>1 / 10,295,472</b>。抽せん機に記憶はないため、過去の結果から次回を「当てる」ことは数学的にできません。
+        このアプリは「どの予想法も本当にランダムと同じなのか？」を<b>検証</b>タブで実データ検証できるようにしています。気になる戦略は検証してから楽しみましょう。</p>
+      </div>
+    </section>
+
+    <section id="tab-check" class="panel" hidden>
+      <div class="card">
+        <h2>保存した番号</h2>
+        <p class="desc">予想タブの「保存」で残した番号です。抽せん結果が入ると自動で当せん確認します。保存先はこの端末のブラウザです。</p>
+        <div id="savedList"></div>
+      </div>
+      <div class="card">
+        <h2>番号を選んで確認</h2>
+        <p class="desc">7個タップして、確認したい回を選んでください。</p>
+        <div class="picker" id="picker" role="group" aria-label="数字を7個選ぶ"></div>
+        <div class="controls picker-controls">
+          <span id="pickCount" class="pick-count">0 / 7</span>
+          <button id="pickClear" class="copy">クリア</button>
+          <label>確認する回
+            <select id="checkDraw"></select>
+          </label>
+        </div>
+        <div id="checkResult"></div>
+      </div>
+    </section>
+
+    <section id="tab-stats" class="panel" hidden>
+      <div class="card">
+        <h2>数字ごとの出現回数</h2>
+        <p class="desc" id="chiText"></p>
+        <div class="legend"><span class="sw hot"></span>平均より多い <span class="sw cold"></span>平均より少ない <span class="line-sw"></span>期待値</div>
+        <div class="chart-scroll"><div id="freqChart" class="freq"></div></div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h2>ホット（直近50回）</h2>
+          <div id="hotList" class="chips"></div>
+          <h2>コールド（未出現が長い）</h2>
+          <div id="coldList" class="chips"></div>
+        </div>
+        <div class="card">
+          <h2>奇数の個数</h2>
+          <div id="oddChart" class="hbars"></div>
+          <h2>連番の組数</h2>
+          <div id="consChart" class="hbars"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>本数字の合計値の分布</h2>
+        <p class="desc" id="sumText"></p>
+        <div id="sumChart" class="hist"></div>
+      </div>
+    </section>
+
+    <section id="tab-backtest" class="panel" hidden>
+      <div class="card">
+        <h2>戦略のバックテスト</h2>
+        <p class="desc">直近の各回について「その回より前のデータだけ」で予想し、実際の当選番号と照合します。理論値は完全ランダムに買った場合の期待値です。</p>
+        <div class="controls">
+          <label>検証する回数
+            <select id="btWindow">
+              <option value="100">直近100回</option>
+              <option value="300" selected>直近300回</option>
+              <option value="600">直近600回</option>
+            </select>
+          </label>
+          <label>1回あたり口数
+            <input type="number" id="btTickets" min="1" max="20" value="5">
+          </label>
+          <button id="btBtn" class="primary">検証する</button>
+        </div>
+        <div id="btResult"></div>
+      </div>
+    </section>
+
+    <section id="tab-history" class="panel" hidden>
+      <div class="card">
+        <h2>過去の当選番号</h2>
+        <div class="table-wrap"><table id="historyTable"></table></div>
+        <button id="moreBtn">さらに表示</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap foot">データ出典: loto7.thekyo.jp（公式発表をもとにしたCSV）。正式な当選番号は必ず公式サイトでご確認ください。</footer>
+
+  <script src="data/loto7-data.js"></script>
+  <script src="src/engine.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
